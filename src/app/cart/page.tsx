@@ -4,130 +4,190 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import CartItem from '../components/CartItem';
-import { books } from '../data/books';
+import { fetchCart, updateCartItem, removeFromCart, fetchBook } from '@/lib/api';
 import { Book, CartItem as CartItemType } from '../types';
 
 export default function CartPage() {
-  const [cartItems, setCartItems] = useState<{ book: Book; quantity: number }[]>([]);
+  const [cartItems, setCartItems] = useState<{ book: Book; quantity: number; cartItem: CartItemType }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load cart from localStorage
-    const storedCart = localStorage.getItem('cart');
-    if (storedCart) {
-      try {
-        const cart: CartItemType[] = JSON.parse(storedCart);
-        const itemsWithBooks = cart
-          .map(item => {
-            const book = books.find(b => b.id === item.bookId);
-            return book ? { book, quantity: item.quantity } : null;
-          })
-          .filter((item): item is { book: Book; quantity: number } => item !== null);
-        
-        setCartItems(itemsWithBooks);
-      } catch (error) {
-        console.error('Failed to parse cart from localStorage', error);
-        setCartItems([]);
-      }
-    }
-    setIsLoading(false);
+    loadCart();
   }, []);
 
-  const updateQuantity = (bookId: string, newQuantity: number) => {
+  const loadCart = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const cartData = await fetchCart('guest');
+      const itemsWithBooks = await Promise.all(
+        cartData.cartItems.map(async (cartItem: CartItemType) => {
+          try {
+            const book = await fetchBook(cartItem.bookId);
+            return { book, quantity: cartItem.quantity, cartItem };
+          } catch (err) {
+            console.error(`Failed to load book ${cartItem.bookId}:`, err);
+            return null;
+          }
+        })
+      );
+      
+      const validItems = itemsWithBooks.filter((item): item is { book: Book; quantity: number; cartItem: CartItemType } => item !== null);
+      setCartItems(validItems);
+    } catch (err) {
+      console.error('Failed to load cart:', err);
+      setError('Failed to load cart. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const updateQuantity = async (bookId: string, newQuantity: number) => {
     if (newQuantity < 1) return;
 
-    // Update local state
-    const updatedItems = cartItems.map(item => 
-      item.book.id === bookId ? { ...item, quantity: newQuantity } : item
-    );
-    setCartItems(updatedItems);
+    try {
+      const cartItem = cartItems.find(item => item.book.id === bookId);
+      if (!cartItem) return;
 
-    // Update localStorage
-    const cartForStorage = updatedItems.map(item => ({
-      id: `${item.book.id}-${Date.now()}`,
-      bookId: item.book.id,
-      quantity: item.quantity,
-      addedAt: new Date().toISOString()
-    }));
-    localStorage.setItem('cart', JSON.stringify(cartForStorage));
-    
-    // Notify navbar
-    window.dispatchEvent(new CustomEvent('cartUpdated'));
+      await updateCartItem(cartItem.cartItem.id, newQuantity);
+      
+      // Update local state
+      setCartItems(prev => 
+        prev.map(item => 
+          item.book.id === bookId ? { ...item, quantity: newQuantity } : item
+        )
+      );
+      
+      // Dispatch cart update event for navbar
+      window.dispatchEvent(new CustomEvent('cartUpdated'));
+    } catch (err) {
+      console.error('Failed to update quantity:', err);
+      alert('Failed to update quantity. Please try again.');
+    }
   };
 
-  const removeItem = (bookId: string) => {
-    // Update local state
-    const updatedItems = cartItems.filter(item => item.book.id !== bookId);
-    setCartItems(updatedItems);
+  const removeItem = async (bookId: string) => {
+    try {
+      const cartItem = cartItems.find(item => item.book.id === bookId);
+      if (!cartItem) return;
 
-    // Update localStorage
-    const cartForStorage = updatedItems.map(item => ({
-      id: `${item.book.id}-${Date.now()}`,
-      bookId: item.book.id,
-      quantity: item.quantity,
-      addedAt: new Date().toISOString()
-    }));
-    localStorage.setItem('cart', JSON.stringify(cartForStorage));
-    
-    // Notify navbar
-    window.dispatchEvent(new CustomEvent('cartUpdated'));
+      await removeFromCart(cartItem.cartItem.id, 'guest');
+      
+      // Update local state
+      setCartItems(prev => prev.filter(item => item.book.id !== bookId));
+      
+      // Dispatch cart update event for navbar
+      window.dispatchEvent(new CustomEvent('cartUpdated'));
+    } catch (err) {
+      console.error('Failed to remove item:', err);
+      alert('Failed to remove item. Please try again.');
+    }
   };
 
-  const clearCart = () => {
-    setCartItems([]);
-    localStorage.removeItem('cart');
-    window.dispatchEvent(new CustomEvent('cartUpdated'));
+  const calculateTotal = () => {
+    return cartItems.reduce((total, item) => total + (item.book.price * item.quantity), 0);
   };
-
-  const totalPrice = cartItems.reduce((total, item) => total + (item.book.price * item.quantity), 0);
 
   if (isLoading) {
-    return <div className="text-center py-10">Loading...</div>;
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-lg text-gray-600">Loading cart...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center bg-red-100 p-8 rounded-lg">
+          <h2 className="text-2xl font-bold text-red-800 mb-2">Error</h2>
+          <p className="text-red-600">{error}</p>
+          <button 
+            onClick={loadCart}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (cartItems.length === 0) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-800 mb-4">Your Cart is Empty</h1>
+          <p className="text-gray-600 mb-8">Add some books to get started!</p>
+          <Link 
+            href="/"
+            className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700"
+          >
+            Browse Books
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold text-gray-800 mb-8">Shopping Cart</h1>
       
-      {cartItems.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-lg shadow-md">
-          <h2 className="text-xl text-gray-600 mb-4">Your cart is empty</h2>
-          <Link href="/" className="bg-blue-500 text-white px-6 py-3 rounded-md hover:bg-blue-600 transition-colors cursor-pointer">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Cart Items */}
+        <div className="lg:col-span-2 space-y-4">
+          {cartItems.map((item) => (
+            <CartItem
+              key={item.book.id}
+              item={{ book: item.book, quantity: item.quantity }}
+              onUpdateQuantity={updateQuantity}
+              onRemoveItem={removeItem}
+            />
+          ))}
+        </div>
+
+        {/* Order Summary */}
+        <div className="bg-gray-50 p-6 rounded-lg h-fit">
+          <h2 className="text-xl font-semibold mb-4">Order Summary</h2>
+          
+          <div className="space-y-3 mb-6">
+            <div className="flex justify-between">
+              <span>Subtotal ({cartItems.length} items):</span>
+              <span>${calculateTotal().toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Shipping:</span>
+              <span className="text-green-600">Free</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Tax:</span>
+              <span>${(calculateTotal() * 0.08).toFixed(2)}</span>
+            </div>
+            <hr />
+            <div className="flex justify-between text-lg font-semibold">
+              <span>Total:</span>
+              <span>${(calculateTotal() * 1.08).toFixed(2)}</span>
+            </div>
+          </div>
+
+          <button className="w-full bg-green-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-700 mb-4">
+            Proceed to Checkout
+          </button>
+          
+          <Link 
+            href="/"
+            className="block w-full text-center bg-gray-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-gray-700"
+          >
             Continue Shopping
           </Link>
         </div>
-      ) : (
-        <>
-          <div className="bg-white rounded-lg shadow-md">
-            {cartItems.map((item) => (
-              <CartItem
-                key={item.book.id}
-                item={item}
-                onUpdateQuantity={updateQuantity}
-                onRemoveItem={removeItem}
-              />
-            ))}
-          </div>
-          
-          <div className="mt-8 bg-white rounded-lg shadow-md p-6">
-            <div className="flex justify-between items-center text-xl font-bold mb-4 text-gray-800">
-              <span>Total: ${totalPrice.toFixed(2)}</span>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/" className="flex-1 bg-gray-500 text-white text-center py-3 rounded-md hover:bg-gray-600 transition-colors cursor-pointer">
-                Continue Shopping
-              </Link>
-              <button 
-                onClick={clearCart}
-                className="flex-1 bg-red-500 text-white py-3 rounded-md hover:bg-red-600 transition-colors cursor-pointer"
-              >
-                Clear Cart
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      </div>
     </div>
   );
 }
