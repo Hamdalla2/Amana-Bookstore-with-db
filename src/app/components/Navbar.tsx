@@ -3,12 +3,43 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useCart } from '../hooks/useCart';
+import { useState, useEffect } from 'react';
+import { CartItem } from '../types';
 
 const Navbar: React.FC = () => {
+  const [cartItemCount, setCartItemCount] = useState(0);
   const pathname = usePathname();
-  const { getCartItemCount } = useCart();
-  const cartItemCount = getCartItemCount();
+
+  useEffect(() => {
+    // This function updates the cart count from localStorage.
+    // It's designed to run on the client side only.
+    const updateCartCount = () => {
+      const storedCart = localStorage.getItem('cart');
+      if (storedCart) {
+        try {
+          const cart: CartItem[] = JSON.parse(storedCart);
+          const count = cart.reduce((total, item) => total + item.quantity, 0);
+          setCartItemCount(count);
+        } catch (error) {
+          console.error('Failed to parse cart from localStorage', error);
+          setCartItemCount(0);
+        }
+      } else {
+        setCartItemCount(0);
+      }
+    };
+
+    // Initial update
+    updateCartCount();
+
+    // Listen for custom event to update cart count
+    window.addEventListener('cartUpdated', updateCartCount);
+
+    // Clean up the event listener
+    return () => {
+      window.removeEventListener('cartUpdated', updateCartCount);
+    };
+  }, []);
   
   return (
     <nav className="bg-white shadow-md fixed w-full top-0 z-10">

@@ -5,7 +5,6 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { Book } from '../types';
 import { addToCart } from '@/lib/api';
-import { useCart } from '../hooks/useCart';
 
 interface BookCardProps {
   book: Book;
@@ -15,9 +14,6 @@ interface BookCardProps {
 const BookCard: React.FC<BookCardProps> = ({ book, onAddToCart }) => {
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const { isInCart } = useCart();
-
-  const bookIsInCart = isInCart(book.id);
 
   // Function to render star ratings
   const renderStars = (rating: number) => {
@@ -97,27 +93,14 @@ const BookCard: React.FC<BookCardProps> = ({ book, onAddToCart }) => {
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden transform hover:-translate-y-1 transition-transform duration-300">
-      {/* Book Cover - Clickable */}
+      {/* Book Cover - Clickable (forced placeholder) */}
       <Link href={`/book/${book.id}`} className="block cursor-pointer">
         <div className="relative h-64 w-full bg-gray-200 flex items-center justify-center hover:bg-gray-300 transition-colors duration-200">
-          {book.image ? (
-            <img 
-              src={book.image.startsWith('/') ? book.image : `/images/${book.image}`}
-              alt={book.title}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                // Fallback to book emoji if image fails to load
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-                const parent = target.parentElement;
-                if (parent) {
-                  parent.innerHTML = '<div class="text-6xl text-gray-400">📚</div>';
-                }
-              }}
-            />
-          ) : (
-            <div className="text-6xl text-gray-400">📚</div>
-          )}
+          <img
+            src="/window.svg"
+            alt={book.title}
+            className="w-full h-full object-cover"
+          />
         </div>
       </Link>
       
@@ -165,8 +148,6 @@ const BookCard: React.FC<BookCardProps> = ({ book, onAddToCart }) => {
             className={`flex-1 px-3 py-2 text-sm rounded-md transition-colors duration-200 ${
               !book.inStock
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : bookIsInCart
-                ? 'bg-green-600 text-white cursor-pointer'
                 : showSuccess
                 ? 'bg-green-600 text-white cursor-pointer'
                 : isAddingToCart
@@ -174,14 +155,7 @@ const BookCard: React.FC<BookCardProps> = ({ book, onAddToCart }) => {
                 : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
             }`}
           >
-            {bookIsInCart ? (
-              <span className="flex items-center justify-center gap-1">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Added
-              </span>
-            ) : showSuccess ? (
+            {showSuccess ? (
               <span className="flex items-center justify-center gap-1">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
