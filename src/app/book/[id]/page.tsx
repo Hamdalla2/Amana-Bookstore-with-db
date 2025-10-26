@@ -7,7 +7,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { fetchBook, fetchReviews, addToCart } from "@/lib/api";
 import { Book, Review } from "../../types";
-import { useCart } from "../hooks/useCart";
 
 export default function BookDetailPage() {
   const [book, setBook] = useState<Book | null>(null);
@@ -16,7 +15,6 @@ export default function BookDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
-  const { isInCart } = useCart();
 
   const params = useParams();
   const { id } = params;
@@ -121,23 +119,15 @@ export default function BookDetailPage() {
       </nav>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Book Image */}
+        {/* Book Image (forced placeholder) */}
         <div className="space-y-4">
           <Image
-            src={book.image && book.image.startsWith('/') ? book.image : `/images/${book.image || 'book1.jpg'}`}
+            src="/window.svg"
             alt={book.title}
             width={800}
             height={600}
             className="w-full h-96 object-cover rounded-lg shadow-lg"
-            onError={(e) => {
-              // Fallback to book emoji if image fails to load
-              const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-              const parent = target.parentElement;
-              if (parent) {
-                parent.innerHTML = '<div class="w-full h-96 bg-gray-200 flex items-center justify-center text-6xl text-gray-400 rounded-lg shadow-lg">📚</div>';
-              }
-            }}
+            priority
           />
         </div>
 
@@ -246,27 +236,10 @@ export default function BookDetailPage() {
 
                 <button
                   onClick={handleAddToCart}
-                  disabled={isAddingToCart || (book && isInCart(book.id))}
-                  className={`w-full py-3 px-6 rounded-lg font-semibold transition-colors duration-200 ${
-                    book && isInCart(book.id)
-                      ? 'bg-green-600 text-white cursor-default'
-                      : isAddingToCart
-                      ? 'bg-blue-400 text-white cursor-wait'
-                      : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  disabled={isAddingToCart}
+                  className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {book && isInCart(book.id) ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Added to Cart
-                    </span>
-                  ) : isAddingToCart ? (
-                    "Adding to Cart..."
-                  ) : (
-                    "Add to Cart"
-                  )}
+                  {isAddingToCart ? "Adding to Cart..." : "Add to Cart"}
                 </button>
               </div>
             )}
